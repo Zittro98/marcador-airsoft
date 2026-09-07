@@ -25,11 +25,12 @@
     <section id="setup" class="view active">
       <div class="panel"><h2>Configurar jornada</h2><div class="grid">
         <div class="field"><label for="eventName">Nombre de la jornada</label><input id="eventName" placeholder="Quedada de airsoft"></div>
-        <div class="field"><label for="defaultMinutes">Duración predeterminada (minutos)</label><input id="defaultMinutes" type="number" min="1" max="180" value="30"></div>
+        <div class="field"><label for="playersTotal">Jugadores totales</label><input id="playersTotal" type="number" min="2" max="100" value="20"></div>
+        <div class="field"><label for="defaultMinutes">Duración predeterminada por partida (minutos)</label><input id="defaultMinutes" type="number" min="1" max="180" value="30"></div>
         <div class="field"><label for="teamA">Equipo azul</label><input id="teamA" value="Alfa"></div>
         <div class="field"><label for="teamB">Equipo rojo</label><input id="teamB" value="Bravo"></div>
       </div><div class="actions"><button class="primary" id="saveSetup">Guardar configuración</button><button id="demo">Cargar datos de prueba</button><button class="danger" id="resetDay">Reiniciar jornada</button></div></div>
-      <div class="panel"><h2>Resumen</h2><div class="grid3"><div><div class="muted">Partidas terminadas</div><strong id="setupRounds">0</strong></div><div><div class="muted">Puntos Alfa</div><strong id="setupA">0</strong></div><div><div class="muted">Puntos Bravo</div><strong id="setupB">0</strong></div></div></div>
+      <div class="panel"><h2>Resumen táctico</h2><div class="grid3"><div><div class="muted">Partidas terminadas</div><strong id="setupRounds">0</strong></div><div><div class="muted">Puntos Alfa</div><strong id="setupA">0</strong></div><div><div class="muted">Puntos Bravo</div><strong id="setupB">0</strong></div></div><div id="playerAdvice" class="notice" style="margin-top:14px">20 jugadores · 10 por equipo · configuración equilibrada</div></div>
     </section>
 
     <section id="game" class="view">
@@ -59,19 +60,21 @@
       zones:{name:'Control de zonas',minutes:45,diff:'Media',objective:'Controlad Norte, Centro y Sur. 5 puntos por zona en cada revisión.',respawn:'Respawn fijo cada 2 minutos.',material:'3 banderas o tarjetas'}
     };
     const KEY='airsoftScore_v1';
-    let state=load()||{event:'Quedada de airsoft',teamA:'Alfa',teamB:'Bravo',defaultMinutes:30,history:[],round:{mode:'beacons',minutes:25,a:0,b:0,started:false,remaining:1500,log:[]}};
+    let state=load()||{event:'Quedada de airsoft',teamA:'Alfa',teamB:'Bravo',players:20,defaultMinutes:30,history:[],round:{mode:'beacons',minutes:30,a:0,b:0,started:false,remaining:1800,log:[]}};
+    state.players=Math.max(2,Number(state.players)||20);
     let interval=null;
     const $=id=>document.getElementById(id); const money=n=>n<0?'−'+Math.abs(n):n;
     function load(){try{return JSON.parse(localStorage.getItem(KEY))}catch(e){return null}}
     function save(){localStorage.setItem(KEY,JSON.stringify(state));$('saveState').textContent='Guardado local · '+new Date().toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit'})}
     function toast(t){$('toast').textContent=t;$('toast').classList.add('show');setTimeout(()=>$('toast').classList.remove('show'),2200)}
-    function names(){ $('title').textContent=state.event||'Marcador Airsoft'; ['teamA','teamB'].forEach((x,i)=>$(x).value=state[i?'teamB':'teamA']); $('labelA').textContent=state.teamA;$('labelB').textContent=state.teamB;$('boardA').textContent=state.teamA;$('boardB').textContent=state.teamB; }
+    function names(){ $('title').textContent=state.event||'Marcador Airsoft'; ['teamA','teamB'].forEach((x,i)=>$(x).value=state[i?'teamB':'teamA']); $('labelA').textContent=state.teamA;$('labelB').textContent=state.teamB;$('boardA').textContent=state.teamA;$('boardB').textContent=state.teamB; $('playersTotal').value=state.players; }
+    function playerPlan(){let n=Math.max(2,Number(state.players)||20),a=Math.ceil(n/2),b=Math.floor(n/2),note=n<10?'Terreno pequeño y partidas de 15–25 min':n<=25?'Configuración equilibrada y partidas de 20–40 min':'Ampliar perímetro, usar 3 árbitros y partidas de 35–60 min';$('playerAdvice').textContent=`${n} jugadores · ${a} en ${state.teamA} · ${b} en ${state.teamB} · ${note}`}
     function totals(){return state.history.reduce((x,r)=>({a:x.a+r.a,b:x.b+r.b}),{a:0,b:0})}
     function fillModes(){let s=Object.entries(MODES).map(([k,m])=>`<option value="${k}">${m.name}</option>`).join('');$('modeSelect').innerHTML=s;$('modeCards').innerHTML=Object.entries(MODES).map(([k,m])=>`<article class="mode"><h3>${m.name}</h3><span class="tag">${m.diff}</span><span class="tag">${m.minutes} min</span><p>${m.objective}</p><p class="muted"><b>Respawn:</b> ${m.respawn}<br><b>Material:</b> ${m.material}</p><button type="button" data-pick="${k}">Usar este modo</button></article>`).join('')}
     function show(view){document.querySelectorAll('.view').forEach(x=>x.classList.toggle('active',x.id===view));document.querySelectorAll('.nav button').forEach(x=>x.classList.toggle('active',x.dataset.view===view));if(view==='scoreboard')renderHistory()}
-    function describe(){let m=MODES[state.round.mode];$('modeDescription').innerHTML=`<b>${m.name}</b> · ${m.diff}<br>${m.objective}<br><span class="muted"><b>Respawn:</b> ${m.respawn} · <b>Material:</b> ${m.material}</span>`;$('roundLabel').textContent=m.name;$('roundMinutes').value=state.round.minutes;$('clock').textContent=clock(state.round.remaining);$('roundA').textContent=money(state.round.a);$('roundB').textContent=money(state.round.b);$('timerStatus').textContent=state.round.started?(interval?'En marcha':'Pausada'):'Lista para empezar';$('roundLog').textContent=state.round.log.length?state.round.log.map(x=>x.text).join(' · '):'Todavía no hay registros.'}
+    function describe(){let m=MODES[state.round.mode],n=Math.max(2,Number(state.players)||20),respawn=n>25?'Respawn por oleadas de 3 minutos para evitar saturación.':m.respawn;$('modeDescription').innerHTML=`<b>${m.name}</b> · ${m.diff}<br>${m.objective}<br><span class="muted"><b>Respawn:</b> ${respawn} · <b>Material:</b> ${m.material}<br><b>Jugadores:</b> ${n} · <b>Equipos:</b> ${Math.ceil(n/2)} / ${Math.floor(n/2)}</span>`;$('roundLabel').textContent=m.name;$('roundMinutes').value=state.round.minutes;$('clock').textContent=clock(state.round.remaining);$('roundA').textContent=money(state.round.a);$('roundB').textContent=money(state.round.b);$('timerStatus').textContent=state.round.started?(interval?'En marcha':'Pausada'):'Lista para empezar';$('roundLog').textContent=state.round.log.length?state.round.log.map(x=>x.text).join(' · '):'Todavía no hay registros.';playerPlan()}
     function clock(s){s=Math.max(0,Math.floor(s));return String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0')}
-    function setMode(k){state.round={mode:k,minutes:MODES[k].minutes,a:0,b:0,started:false,remaining:MODES[k].minutes*60,log:[]};save();describe()}
+    function setMode(k){let minutes=Math.max(1,Number(state.defaultMinutes)||MODES[k].minutes);state.round={mode:k,minutes,a:0,b:0,started:false,remaining:minutes*60,log:[]};save();describe()}
     function add(team,action){let values={objective:5,win:20,fair:5,penalty:-5};let v=values[action];let label={objective:'objetivo',win:'victoria',fair:'juego limpio',penalty:'penalización'}[action];state.round[team.toLowerCase()]+=v;state.round.log.push({team,action,value:v,text:`${team==='A'?state.teamA:state.teamB}: ${label} (${money(v)})`});save();describe();toast('Registro añadido')}
     function finish(){if(!confirm('¿Finalizar y guardar esta partida?'))return; if(!state.round.started&&state.round.log.length===0&&state.round.a===0&&state.round.b===0){toast('Registra algún resultado antes de finalizar');return} if(interval){clearInterval(interval);interval=null} let a=state.round.a,b=state.round.b;let winner=a>b?state.teamA:b>a?state.teamB:'Empate';state.history.push({mode:MODES[state.round.mode].name,winner,a,b,minutes:state.round.minutes,at:new Date().toISOString()});save();updateSummary();toast('Partida guardada');setMode(state.round.mode);show('scoreboard')}
     function resetRound(){if(!confirm('¿Reiniciar la partida actual?'))return;setMode(state.round.mode);toast('Partida reiniciada')}
@@ -81,7 +84,8 @@
     function exportCsv(){let rows=[['Partida','Modo','Ganador',state.teamA,state.teamB,'Duración','Fecha'],...state.history.map((r,i)=>[i+1,r.mode,r.winner,r.a,r.b,r.minutes,new Date(r.at).toLocaleString('es-ES')]),['TOTAL','', '',totals().a,totals().b,'','']];let csv='\ufeff'+rows.map(row=>row.map(x=>'"'+String(x).replaceAll('"','""')+'"').join(';')).join('\n');let a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));a.download='resultados-airsoft.csv';a.click();URL.revokeObjectURL(a.href);toast('CSV exportado')}
     function demo(){state.history=[{mode:'Búsqueda de balizas',winner:state.teamA,a:25,b:15,minutes:25,at:new Date().toISOString()},{mode:'Captura de bandera',winner:state.teamB,a:10,b:25,minutes:35,at:new Date().toISOString()}];save();renderHistory();toast('Datos de prueba cargados')}
     document.querySelectorAll('.nav button').forEach(b=>b.onclick=()=>show(b.dataset.view));
-    $('saveSetup').onclick=()=>{state.event=$('eventName').value||'Quedada de airsoft';state.teamA=$('teamA').value||'Alfa';state.teamB=$('teamB').value||'Bravo';state.defaultMinutes=Math.max(1,Number($('defaultMinutes').value)||30);save();names();updateSummary();describe();toast('Configuración guardada')};
+    $('saveSetup').onclick=()=>{state.event=$('eventName').value||'Quedada de airsoft';state.teamA=$('teamA').value||'Alfa';state.teamB=$('teamB').value||'Bravo';state.players=Math.max(2,Math.min(100,Number($('playersTotal').value)||20));state.defaultMinutes=Math.max(1,Math.min(180,Number($('defaultMinutes').value)||30));save();names();updateSummary();describe();toast('Configuración guardada')};
+    $('playersTotal').onchange=e=>{state.players=Math.max(2,Math.min(100,Number(e.target.value)||20));save();describe()};
     $('modeSelect').onchange=e=>setMode(e.target.value);$('roundMinutes').onchange=e=>{let n=Math.max(1,Number(e.target.value)||30);state.round.minutes=n;state.round.remaining=n*60;save();describe()};
     document.querySelectorAll('[data-team]').forEach(b=>b.onclick=()=>add(b.dataset.team,b.dataset.action));
     $('modeCards').addEventListener('click',e=>{let b=e.target.closest('[data-pick]');if(!b)return;setMode(b.dataset.pick);show('game')});
@@ -89,7 +93,7 @@
     $('pauseTimer').onclick=()=>{if(interval){clearInterval(interval);interval=null;describe();toast('Cronómetro pausado')}else if(state.round.started){$('startTimer').click()}};
     $('finishRound').onclick=finish;$('resetRound').onclick=resetRound;$('resetDay').onclick=resetDay;$('demo').onclick=demo;$('exportCsv').onclick=exportCsv;$('goRules').onclick=()=>show('rules');
     $('undo').onclick=()=>{let x=state.round.log.pop();if(!x){toast('No hay nada que deshacer');return}state.round[x.team.toLowerCase()]-=x.value;save();describe();toast('Último registro deshecho')};
-    $('eventName').value=state.event;$('defaultMinutes').value=state.defaultMinutes;$('modeSelect').value=state.round.mode;fillModes();names();describe();updateSummary();renderHistory();
+    $('eventName').value=state.event;$('defaultMinutes').value=state.defaultMinutes;$('playersTotal').value=state.players;$('modeSelect').value=state.round.mode;fillModes();names();describe();updateSummary();renderHistory();
   </script>
 </body>
 </html>
